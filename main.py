@@ -158,25 +158,28 @@ def process_message(topic, msg):
         if message["action"] == "open":
             # Identificar si se está retirando un documento
             retirar = message.get("retirar", False)
-            open_locker(lockers[message["locker"]], retirar=retirar)
+            open_locker(message["locker"], retirar=retirar)
         elif message["action"] == "close":
             # Identificar si se está ingresando un documento
             ingresar = message.get("ingresar", False)
-            close_locker(lockers[message["locker"]], ingresar=ingresar)
+            close_locker(message["locker"], ingresar=ingresar)
+
 
 
 ## CODIGO DE LOGICA 
-def open_locker(locker, retirar=False):
-		print("Entre a Open_Locker")
-		locker['relay'].value(ABIERTO)
-		locker['cerrado'] = False
-		if retirar:
-				locker['disponible'] = False
-				locker['hora_desocupacion'] = time.time()  # Actualiza la hora de desocupación
-		check_locker(locker)
+def open_locker(locker_name, retirar=False):
+    print("Entre a Open_Locker")
+    locker = lockers[locker_name]
+    locker['relay'].value(ABIERTO)
+    locker['cerrado'] = False
+    if retirar:
+        locker['disponible'] = False
+        locker['hora_desocupacion'] = time.time()  # Actualiza la hora de desocupación
+    check_locker(locker_name)
 
-def close_locker(locker, ingresar=False):
+def close_locker(locker_name, ingresar=False):
     print("Entre a close_locker")
+    locker = lockers[locker_name]
     if locker['locker_vacio'].value() or ingresar:
         locker['relay'].value(CERRADO)
         locker['cerrado'] = True
@@ -186,11 +189,12 @@ def close_locker(locker, ingresar=False):
     else:
         start_buzzer()
         time.sleep(1)  # Espera un segundo antes de verificar el locker
-        check_locker(locker)
+        check_locker(locker_name)
         stop_buzzer()  # Detiene el buzzer después de la verificación
 
-def check_locker(locker):
+def check_locker(locker_name):
     print("Entre a check_locker")
+    locker = lockers[locker_name]
     locker["ocupado"] = locker["puerta_cerrada"].value()
 
 def start_buzzer():

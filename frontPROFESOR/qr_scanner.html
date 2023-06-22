@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>QR Device Shadow Control</title>
+
+    <script src="html5-qrcode.min.js"></script>
+    <script>
+      let html5QrcodeScanner;
+
+      function onScanSuccess(decodedText, decodedResult) {
+        if (html5QrcodeScanner === undefined) {
+          alert("Scanner not initialized");
+          return;
+        }
+
+        if (!decodedText.includes("?")) {
+          alert("Are you reading a valid document?");
+          return;
+        }
+
+        const [url, query] = decodedText.split("?");
+
+        const urlQueryParams = new URLSearchParams(query);
+
+        const rutValue = urlQueryParams.get("RUN");
+
+        html5QrcodeScanner.clear();
+
+        const element = document.getElementById("document-result");
+
+        element.innerHTML = `We have found a document: ${rutValue}`;
+      }
+
+      function startScan() {
+        html5QrcodeScanner = new Html5QrcodeScanner("reader", {
+          fps: 10,
+          qrbox: 250,
+        });
+        html5QrcodeScanner.render(onScanSuccess);
+      }
+    </script>
+    <style>
+      * {
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      body {
+        padding: 3rem;
+      }
+
+      button,
+      a {
+        width: 100%;
+        background-color: #4caf50;
+        color: white;
+        padding: 14px 20px;
+        margin: 8px 0;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        text-decoration: none;
+      }
+
+      button:hover,
+      a:hover {
+        background-color: #45a049;
+      }
+
+      h1 > a {
+        margin: 0;
+        padding: 5px;
+        font-size: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>
+      QR Scanner
+      <a href="index.html">Volver</a>
+    </h1>
+
+    <button onclick="startScan()">Start QR</button>
+
+    <div style="width: 500px" id="reader"></div>
+
+    <p id="document-result"></p>
+  </body>
+</html>
