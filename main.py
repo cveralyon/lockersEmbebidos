@@ -77,8 +77,7 @@ lockers = {
                 "disponible": True},
 }
 
-
-# Set initial relay states to ON 
+# Set initial relay states to CERRADO 
 for locker in lockers.values():
     locker['relay'].value(CERRADO)
 
@@ -125,14 +124,25 @@ mqtt.set_callback(mqtt_subscribe)
 mqtt.subscribe(TOPIC_SUB)
 
 
-def open_locker(locker):
+def open_locker(locker, retirar=False):
     locker['relay'].value(ABIERTO)
     locker['cerrado'] = False
+    # Actualizar el estado de disponibilidad en caso de que se esté retirando un documento
+    if retirar:
+        locker['disponible'] = False
     check_locker(locker)
 
-def close_locker(locker):
-    locker['relay'].value(CERRADO)
-    locker['cerrado'] = True
+def close_locker(locker, ingresar=False):
+    # El locker solo se cierra si está vacío o si se está ingresando un documento
+    if locker['locker_vacio'].value() or ingresar:
+        locker['relay'].value(CERRADO)
+        locker['cerrado'] = True
+        # Actualizar el estado de disponibilidad en caso de que se esté ingresando un documento
+        if ingresar:
+            locker['disponible'] = False
+    else:
+        # Emitir sonido si se intenta cerrar el locker con documentos dentro
+        start_buzzer()
     check_locker(locker)
     
 def check_locker(locker):
@@ -172,14 +182,16 @@ def update_shadow(mqtt_client, locker_id):
     mqtt_publish(mqtt_client, topic, ujson.dumps(payload))
 
 def process_message(topic, msg):
-    # process the received MQTT message
-    # this could involve opening or closing lockers, or performing other actions
     message = ujson.loads(msg)
     if "action" in message:
-        if message["action"] == "cerrado":
-            open_locker(message["locker"])
+        if message["action"] == "open":
+            # Identificar si se está retirando un documento
+            retirar = message.get("retirar", False)
+            open_locker(message["locker"], retirar=retirar)
         elif message["action"] == "close":
-            close_locker(message["locker"])
+            # Identificar si se está ingresando un documento
+            ingresar = message.get("ingresar", False)
+            close_locker(message["locker"], ingresar=ingresar)
     # and so on for other possible actions
 
 mqtt.set_callback(process_message)
