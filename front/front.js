@@ -1,29 +1,23 @@
-// Importar la biblioteca Paho MQTT
-var Paho = require("paho-mqtt");
-SERVER = "a1ji7xd8yopagp-ats.iot.us-east-2.amazonaws.com";
-CLIENT_ID = "cerraduras-Esp32";
-TOPIC_PUB = "$aws/things/" + CLIENT_ID + "/shadow/update";
-TOPIC_SUB = "$aws/things/" + CLIENT_ID + "/shadow/update/delta";
+// Definir las constantes del servidor MQTT
+const SERVER = "a1ji7xd8yopagp-ats.iot.us-east-2.amazonaws.com";
+const CLIENT_ID = "cerraduras-Esp32";
+const TOPIC_PUB = "$aws/things/" + CLIENT_ID + "/shadow/update";
+const TOPIC_SUB = "$aws/things/" + CLIENT_ID + "/shadow/update/delta";
 
 // Crear un nuevo cliente MQTT
-var client = new Paho.Client(SERVER, Number(443), CLIENT_ID);
+const client = new Paho.MQTT.Client(SERVER, Number(443), CLIENT_ID);
 
 // Configurar las callbacks
 client.onConnectionLost = onConnectionLost;
 client.onMessageArrived = onMessageArrived;
 
-// Conectar el cliente
-client.connect({
-  useSSL: true,
-  timeout: 3,
-  mqttVersion: 4,
-  onSuccess: onConnect,
-});
+let isConnected = false;
 
 // Cuando la conexión es exitosa
 function onConnect() {
   console.log("onConnect");
   client.subscribe(TOPIC_SUB);
+  isConnected = true; // Marcamos que la conexión fue exitosa.
 }
 
 // Cuando se pierde la conexión
@@ -38,17 +32,13 @@ function onMessageArrived(message) {
   console.log("onMessageArrived:" + message.payloadString);
 }
 
-// Funciones para abrir los lockers
-function abrirLockerAdmin(hash) {
-  var message = new Paho.Message(hash);
-  message.destinationName = TOPIC_PUB;
-  client.send(message);
-}
-
-function abrirLockerUsuario(hash) {
-  var message = new Paho.Message(hash);
-  message.destinationName = TOPIC_PUB;
-  client.send(message);
+function connectMqttClient() {
+  client.connect({
+    useSSL: true,
+    timeout: 3,
+    mqttVersion: 4,
+    onSuccess: onConnect,
+  });
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -83,7 +73,6 @@ function generateHash(rut) {
 function openLocker() {
   var rut = document.getElementById("rut").value;
   var hash = generateHash(rut);
-  // Llamamos la función que está en front.js
   abrirLockerAdmin(rut);
 }
 
@@ -131,75 +120,46 @@ function verifyHashAndOpenLocker() {
 
   if (hash == providedHash) {
     document.getElementById("verifyResult").innerHTML = "ACCESO CONCEDIDO";
-    // Llamamos la función que está en front.js
     abrirLockerUsuario(rut);
   } else {
     document.getElementById("verifyResult").innerHTML = "ACCESO DENEGADO";
   }
 }
 
-// Deberías implementar estas funciones que interactúan con el backend
-// Función para abrir el locker del administrador
-function abrirLockerAdmin(hash) {
-  // Crear un objeto con la información necesaria
-  var data = {
-    rut: hash,
+function abrirLockerAdmin(lockerName) {
+  if (!isConnected) {
+    console.log("Aún no conectado, intentando conectar...");
+    connectMqttClient();
+    return;
+  }
+
+  // Creamos un objeto con el estado deseado para el locker
+  let desiredState = {
     action: "open",
+    locker: lockerName,
   };
 
-  // Convertir el objeto en una cadena JSON
-  var jsonData = JSON.stringify(data);
-
-  // Enviar la solicitud AJAX a la API de AWS IoT Core
-  var xhr = new XMLHttpRequest();
-  xhr.open("POST", SERVER, true);
-  xhr.setRequestHeader("Content-Type", "application/json");
-  xhr.send(jsonData);
-
-  xhr.onreadystatechange = function () {
-    if (xhr.readyState === 4 && xhr.status === 200) {
-      var json = JSON.parse(xhr.responseText);
-      console.log(json);
-    }
-  };
+  // Convertimos el objeto a una cadena JSON
+  let message = new Paho.MQTT.Message(JSON.stringify(desiredState));
+  message.destinationName = TOPIC_PUB;
+  client.send(message);
 }
 
-function getDeviceShadow() {
-  // Enviar una solicitud AJAX para obtener la sombra del dispositivo
-  var xhr = new XMLHttpRequest();
-  xhr.open("GET", SERVER + "/device-shadow", true);
-  xhr.setRequestHeader("Content-Type", "application/json");
-  xhr.send();
+function abrirLockerUsuario(lockerName) {
+  if (!isConnected) {
+    console.log("Aún no conectado, intentando conectar...");
+    connectMqttClient();
+    return;
+  }
 
-  xhr.onreadystatechange = function () {
-    if (xhr.readyState === 4 && xhr.status === 200) {
-      var json = JSON.parse(xhr.responseText);
-      console.log(json);
-    }
-  };
-}
-
-// Función para abrir el locker del usuario
-function abrirLockerUsuario(hash) {
-  // Crear un objeto con la información necesaria
-  var data = {
-    rut: hash,
+  // Creamos un objeto con el estado deseado para el locker
+  let desiredState = {
     action: "open",
+    locker: lockerName,
   };
 
-  // Convertir el objeto en una cadena JSON
-  var jsonData = JSON.stringify(data);
-
-  // Enviar la solicitud AJAX a la API de AWS IoT Core
-  var xhr = new XMLHttpRequest();
-  xhr.open("POST", SERVER, true);
-  xhr.setRequestHeader("Content-Type", "application/json");
-  xhr.send(jsonData);
-
-  xhr.onreadystatechange = function () {
-    if (xhr.readyState === 4 && xhr.status === 200) {
-      var json = JSON.parse(xhr.responseText);
-      console.log(json);
-    }
-  };
+  // Convertimos el objeto a una cadena JSON
+  let message = new Paho.MQTT.Message(JSON.stringify(desiredState));
+  message.destinationName = TOPIC_PUB;
+  client.send(message);
 }
