@@ -126,6 +126,7 @@ def mqtt_publish(client, topic, message):
 
 def mqtt_callback(topic, message):
     print((topic, message))
+    process_message(topic, message)  # Agregado para procesar los mensajes recibidos
 
 # Function to handle the locker data
 def locker_data(locker):
@@ -157,39 +158,40 @@ def process_message(topic, msg):
         if message["action"] == "open":
             # Identificar si se está retirando un documento
             retirar = message.get("retirar", False)
-            open_locker(message["locker"], retirar=retirar)
+            open_locker(lockers[message["locker"]], retirar=retirar)
         elif message["action"] == "close":
             # Identificar si se está ingresando un documento
             ingresar = message.get("ingresar", False)
-            close_locker(message["locker"], ingresar=ingresar)
-    # and so on for other possible actions
+            close_locker(lockers[message["locker"]], ingresar=ingresar)
 
 
 ## CODIGO DE LOGICA 
 def open_locker(locker, retirar=False):
-    locker['relay'].value(ABIERTO)
-    locker['cerrado'] = False
-    # Actualizar el estado de disponibilidad en caso de que se esté retirando un documento
-    if retirar:
-        locker['disponible'] = False
-    check_locker(locker)
+		print("Entre a Open_Locker")
+		locker['relay'].value(ABIERTO)
+		locker['cerrado'] = False
+		if retirar:
+				locker['disponible'] = False
+				locker['hora_desocupacion'] = time.time()  # Actualiza la hora de desocupación
+		check_locker(locker)
 
 def close_locker(locker, ingresar=False):
-    # El locker solo se cierra si está vacío o si se está ingresando un documento
+    print("Entre a close_locker")
     if locker['locker_vacio'].value() or ingresar:
         locker['relay'].value(CERRADO)
         locker['cerrado'] = True
-        # Actualizar el estado de disponibilidad en caso de que se esté ingresando un documento
         if ingresar:
             locker['disponible'] = False
+            locker['hora_ocupacion'] = time.time()  # Actualiza la hora de ocupación
     else:
-        # Emitir sonido si se intenta cerrar el locker con documentos dentro
         start_buzzer()
-    check_locker(locker)
-    
+        time.sleep(1)  # Espera un segundo antes de verificar el locker
+        check_locker(locker)
+        stop_buzzer()  # Detiene el buzzer después de la verificación
+
 def check_locker(locker):
-    # check if the locker is ocupado by reading the sensor
-    lockers[locker]["ocupado"] = lockers[locker]["puerta_cerrada"].value()
+    print("Entre a check_locker")
+    locker["ocupado"] = locker["puerta_cerrada"].value()
 
 def start_buzzer():
 		# Configura la frecuencia del BUZZER (por ejemplo, 440 Hz para la nota A4)
@@ -208,7 +210,7 @@ def main():
     while True:
         # Check and update the state of each locker
         for locker_name, locker in lockers.items():
-            if locker["relay"].value() == 1:
+            if locker["relay"].value() == 1000:
                 locker["cerrado"] = False
             else:
                 locker["cerrado"] = True
