@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <h2>Generar hash de RUT</h2>
+
+    <form id="hashForm">
+      <label for="rut">Ingresa el RUT:</label><br />
+      <input type="text" id="rut" name="rut" /><br />
+      <input type="button" value="Abrir Locker" id="generateBtn" />
+    </form>
+
+    <p id="lockerStatus"></p>
+    <p id="hashResult"></p>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.0.0/crypto-js.min.js"></script>
+    <script src="front.js"></script>
+  </body>
+</html>

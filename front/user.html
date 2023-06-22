@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>QR y Verificación de hash</title>
+    <script src="html5-qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.0.0/crypto-js.min.js"></script>
+    <script src="front.js"></script>
+    <style>
+      /* Tu CSS aquí */
+    </style>
+  </head>
+  <body>
+    <h2>Escanea tu QR</h2>
+    <button id="startScanBtn">Iniciar QR</button>
+    <div style="width: 500px" id="reader"></div>
+
+    <h2>Verificar hash de RUT</h2>
+    <form id="checkForm">
+      <label for="rutCheck">Tu RUT:</label><br />
+      <input type="text" id="rutCheck" name="rutCheck" readonly /><br />
+      <label for="hashCheck">Ingresa el hash del RUT:</label><br />
+      <input type="text" id="hashCheck" name="hashCheck" /><br />
+      <input type="button" value="Verificar y abrir locker" id="verifyBtn" />
+    </form>
+    <p id="verifyResult"></p>
+  </body>
+</html>

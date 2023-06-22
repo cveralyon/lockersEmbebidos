@@ -1,16 +1,40 @@
+from machine import Pin, PWM
 import os
 import time
 import ujson
 import esp32
+import network
 from umqtt.simple import MQTTClient
-from machine import Pin, PWM
 
-# Configura el ciclo de trabajo a 0 para silenciar el BUZZER
-CLIENT_ID = "your_client_id"
-SERVER = "your_server"
-SSL_PARAMS = {"cert_reqs": ssl.CERT_REQUIRED, "ca_certs": "/etc/ca.crt", "keyfile": "/etc/client.key", "certfile": "/etc/client.crt"}
-TOPIC_SUB = "your_topic_sub"
-TOPIC_PUB = "your_topic_pub"
+# Wi-Fi details
+WIFI_SSID = 'wifi-campus'
+WIFI_PASSWORD = 'uandes2200'
+
+# AWS IoT Core details
+SERVER = 'a1ji7xd8yopagp-ats.iot.us-east-2.amazonaws.com'
+CLIENT_ID = 'cerraduras-Esp32'
+TOPIC_PUB = '$aws/things/' + CLIENT_ID + '/shadow/update'
+TOPIC_SUB = '$aws/things/' + CLIENT_ID + '/shadow/update/delta'
+
+# Connect to wifi
+wlan = network.WLAN(network.STA_IF)
+wlan.active(True)
+if not wlan.isconnected():
+    print('Connecting to network...')
+    wlan.connect(WIFI_SSID, WIFI_PASSWORD)
+    while not wlan.isconnected():
+        pass
+
+print('Connection successful')
+print('Network config:', wlan.ifconfig())
+
+# Load AWS certificates
+with open('a6750dee-private.pem.key', 'r') as f:
+    key = f.read()
+with open('a6750dee-certificate.pem.crt', 'r') as f:
+    cert = f.read()
+
+SSL_PARAMS = { 'key': key, 'cert': cert, 'server_side': False }
 
 #define pins of buzzer
 BUZZER_PIN = 13
@@ -84,46 +108,64 @@ for locker in lockers.values():
 # Crea un objeto PWM para controlar el BUZZER
 buzzer = PWM(Pin(BUZZER_PIN))
 
-def mqtt_connect(client_id, endpoint, ssl_params):
-    mqtt = MQTTClient(
-        client_id=client_id,
-        server=endpoint,
-        ssl_params=ssl_params,
-        port=8883,
-        keepalive=4000,
-        ssl=True
-    )
-    print('Connecting to AWS IoT...')
-    mqtt.connect()
-    print('Done')
-    return mqtt
 
-def mqtt_publish(client, topic, message=''):
-    print('Publishing message...')
-    print('TOp', topic)
+## CODIGO DE CONECTION CON AWS IoT Core MQTT Client
+
+# Function to initialize the AWS IoT Core MQTT Client
+def connect_to_mqtt():
+    client = MQTTClient(client_id=CLIENT_ID, server=SERVER, port=8883, ssl=True, ssl_params=SSL_PARAMS)
+    client.set_callback(mqtt_callback)
+    client.connect()
+    client.subscribe(TOPIC_SUB)
+    print("Connected to %s, subscribed to %s topic" % (SERVER, TOPIC_SUB))
+    return client
+
+# Function to publish a message to the AWS IoT Core MQTT Client
+def mqtt_publish(client, topic, message):
     client.publish(topic, message)
-    print(message)
-
-def mqtt_subscribe(topic, msg):
-    print('Message received...')
-    print('TOP', topic)
-    message = ujson.loads(msg)
-    print(topic, message)
-    if message['state']['led']:
-        led_state(message)
-    print('Done')
-
-def led_state(message):
-    led.value(message['state']['led']['onboard'])
 
 def mqtt_callback(topic, message):
     print((topic, message))
 
-mqtt = mqtt_connect(CLIENT_ID, SERVER, SSL_PARAMS)
-mqtt.set_callback(mqtt_subscribe)
-mqtt.subscribe(TOPIC_SUB)
+# Function to handle the locker data
+def locker_data(locker):
+    locker_data = {
+        "ocupado": locker["ocupado"],
+        "cerrado": locker["cerrado"],
+        "hora_ocupacion": locker["hora_ocupacion"],
+        "hora_desocupacion": locker["hora_desocupacion"],
+        "rut": locker["rut"],
+        "disponible": locker["disponible"]
+    }
+    return locker_data
+
+# Function to update the shadow of a locker
+def update_locker_shadow(client, locker_name):
+    shadow_message = {
+        "state": {
+            "reported": {
+                locker_name: locker_data(lockers[locker_name])
+            }
+        }
+    }
+    shadow_message_str = ujson.dumps(shadow_message)
+    mqtt_publish(client, TOPIC_PUB, shadow_message_str)
+
+def process_message(topic, msg):
+    message = ujson.loads(msg)
+    if "action" in message:
+        if message["action"] == "open":
+            # Identificar si se está retirando un documento
+            retirar = message.get("retirar", False)
+            open_locker(message["locker"], retirar=retirar)
+        elif message["action"] == "close":
+            # Identificar si se está ingresando un documento
+            ingresar = message.get("ingresar", False)
+            close_locker(message["locker"], ingresar=ingresar)
+    # and so on for other possible actions
 
 
+## CODIGO DE LOGICA 
 def open_locker(locker, retirar=False):
     locker['relay'].value(ABIERTO)
     locker['cerrado'] = False
@@ -159,66 +201,30 @@ def stop_buzzer():
 		# Configura el ciclo de trabajo para que el BUZZER suene (0-1023, donde 512 es aproximadamente el 50%)
 		buzzer.duty(0)
 
-def update_shadow(mqtt_client, locker_id):
-    # fetch the state of the locker
-    locker = lockers[locker_id]
-
-    # create the payload for the shadow update
-    payload = {
-        "state": {
-            "reported": {
-                "rut": locker['rut'],
-                "hora_ocupacion": locker['hora_ocupacion'],
-                "hora_desocupacion": locker['hora_desocupacion'],
-                "cerrado": locker['cerrado'],
-                "ocupado": locker['ocupado'],
-                "disponible": locker['disponible']
-            }
-        }
-    }
-
-    # publish the shadow update
-    topic = "$aws/things/{}/shadow/update".format(locker_id)
-    mqtt_publish(mqtt_client, topic, ujson.dumps(payload))
-
-def process_message(topic, msg):
-    message = ujson.loads(msg)
-    if "action" in message:
-        if message["action"] == "open":
-            # Identificar si se está retirando un documento
-            retirar = message.get("retirar", False)
-            open_locker(message["locker"], retirar=retirar)
-        elif message["action"] == "close":
-            # Identificar si se está ingresando un documento
-            ingresar = message.get("ingresar", False)
-            close_locker(message["locker"], ingresar=ingresar)
-    # and so on for other possible actions
-
-mqtt.set_callback(process_message)
-
-while True:
-    # periodically check for messages
-    mqtt.check_msg()
+def main():
+    # Connect to MQTT
+    client = connect_to_mqtt()
     
-    all_lockers_closed = True
-    
-    # check the state of each locker
-    for locker in lockers:
-        check_locker(locker)
-        update_shadow(mqtt, locker)
-        if lockers[locker]["ocupado"] and not lockers[locker]["cerrado"]:
-            # if the locker is ocupado and not closed, beep the buzzer
-            start_buzzer()
-            all_lockers_closed = False
+    while True:
+        # Check and update the state of each locker
+        for locker_name, locker in lockers.items():
+            if locker["relay"].value() == 1:
+                locker["cerrado"] = False
+            else:
+                locker["cerrado"] = True
+            
+            if locker["locker_vacio"].value() == 1:
+                locker["ocupado"] = False
+            else:
+                locker["ocupado"] = True
+                
+            # Update the shadow of the locker
+            update_locker_shadow(client, locker_name)
 
-    if all_lockers_closed:
-        stop_buzzer()
-
-    # publish the current state of the lockers
-    mqtt_publish(mqtt, TOPIC_PUB, ujson.dumps(lockers))
-    
-    # sleep for a bit before the next iteration
-    time.sleep(0.1)
-    
-
+        # Non-blocking wait for message
+        client.check_msg()
+        time.sleep(1)
+        
+if __name__ == "__main__":
+    main()
 

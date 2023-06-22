@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Device Shadow Control</title>
+    <script>
+        function addRowToTable(data) {
+            const tableBody = document.getElementById('table-body');
+
+            tableBody.innerHTML = `
+                ${tableBody.innerHTML}
+                <tr>
+                    <td>${data.id}</td>
+                    <td>${data.rut}</td>
+                    <td>${data.isOpen ? 'Abierto' : 'Cerrado'}</td>
+                </tr>
+            `;
+        }
+
+        // Esto se ejecuta cuando su página se haya cargado
+        addEventListener("load", () => {
+            // Ejemplo de como deberían agregar una fila
+            addRowToTable({ id: 'espacio-1', rut: '12.345.678-9', isOpen: 'false' })
+
+            // 1. obtener la sombra inicial
+            // getDeviceShadow()
+
+            // 2. Activar intervalos recurrentes para obtener el estado
+            // setInterval(() => getDeviceShadow(), 1000);
+        });
+    </script>
+    <style>
+        * {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        
+        body {
+            padding: 3rem;
+        }
+        
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        table td, table th {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+
+        table tr:nth-child(even){
+            background-color: #f2f2f2;
+        }
+
+        table tr:hover {
+            background-color: #ddd;
+        }
+
+        table th {
+            padding-top: 12px;
+            padding-bottom: 12px;
+            text-align: left;
+            background-color: #04AA6D;
+            color: white;
+        }
+
+        button, a {
+            width: 100%;
+            background-color: #4CAF50;
+            color: white;
+            padding: 14px 20px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        button:hover, a:hover {
+            background-color: #45a049;
+        }
+
+        h1 > a {
+            margin: 0;
+            padding: 5px;
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>
+        Admin
+        <a href="index.html">Volver</a>
+    </h1>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>
+                    # Espacio
+                </th>
+                <th>
+                    Rut asignado
+                </th>
+                <th>
+                    Estado
+                </th>
+            </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+    </table>
+</body>
+</html>
