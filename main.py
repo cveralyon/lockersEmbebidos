@@ -13,20 +13,20 @@ TOPIC_SUB = "your_topic_sub"
 TOPIC_PUB = "your_topic_pub"
 
 #define pins of buzzer
-BUZZER_PIN = 5
+BUZZER_PIN = 13
 
 # define the pins for the relays, sensors 1
 LOCKER1_RELAY_PIN = 27
-LOCKER1_SENSOR_DOOR_PIN = ...
-LOCKER1_SENSOR_VACIO_PIN = ...
+LOCKER1_SENSOR_DOOR_PIN = 12
+LOCKER1_SENSOR_VACIO_PIN = 14
 # define the pins for the relays, sensors 2
 LOCKER2_RELAY_PIN = 26
-LOCKER2_SENSOR_DOOR_PIN = ...
-LOCKER2_SENSOR_VACIO_PIN = ...
+LOCKER2_SENSOR_DOOR_PIN = 33
+LOCKER2_SENSOR_VACIO_PIN = 32
 # define the pins for the relays, sensors 3
 LOCKER3_RELAY_PIN = 25
-LOCKER3_SENSOR_DOOR_PIN = ...
-LOCKER3_SENSOR_VACIO_PIN = ...
+LOCKER3_SENSOR_DOOR_PIN = 35
+LOCKER3_SENSOR_VACIO_PIN = 34
 
 # initialize the pins locker 1
 locker1_relay = Pin(LOCKER1_RELAY_PIN, Pin.OUT)
@@ -41,19 +41,46 @@ locker3_relay = Pin(LOCKER3_RELAY_PIN, Pin.OUT)
 locker3_sensor_DOOR = Pin(LOCKER3_SENSOR_DOOR_PIN, Pin.IN)
 locker3_sensor_VACIO = Pin(LOCKER3_SENSOR_VACIO_PIN, Pin.IN)
 
-RELAY_ON = 0
-RELAY_OFF = 1000
+CERRADO = 0
+ABIERTO = 1000
 
 # create a dictionary to store the lockers' states
 lockers = {
-    "locker1": {"relay": locker1_relay, "puerta_cerrada": locker1_sensor_DOOR, "locker_vacio": locker1_sensor_VACIO, "ocupado": False, "cerrado": True},
-    "locker2": {"relay": locker2_relay, "puerta_cerrada": locker2_sensor_DOOR, "locker_vacio": locker2_sensor_VACIO, "ocupado": False, "cerrado": True},
-    "locker3": {"relay": locker3_relay, "puerta_cerrada": locker3_sensor_DOOR, "locker_vacio": locker3_sensor_VACIO, "ocupado": False, "cerrado": True},
+    "locker1": {"relay": locker1_relay, 
+                "puerta_cerrada": locker1_sensor_DOOR, 
+                "locker_vacio": locker1_sensor_VACIO, 
+                "ocupado": False, 
+                "cerrado": True, 
+                "hora_ocupacion": None,
+                "hora_desocupacion": None, 
+                "rut": None, 
+                "disponible": True},
+    
+    "locker2": {"relay": locker2_relay, 
+                "puerta_cerrada": locker2_sensor_DOOR, 
+                "locker_vacio": locker2_sensor_VACIO, 
+                "ocupado": False, 
+                "cerrado": True, 
+                "hora_ocupacion": None,
+                "hora_desocupacion": None, 
+                "rut": None, 
+                "disponible": True},
+    
+    "locker3": {"relay": locker3_relay, 
+                "puerta_cerrada": locker3_sensor_DOOR, 
+                "locker_vacio": locker3_sensor_VACIO, 
+                "ocupado": False, 
+                "cerrado": True, 
+                "hora_ocupacion": None,
+                "hora_desocupacion": None, 
+                "rut": None, 
+                "disponible": True},
 }
 
-# Set initial relay states to OFF
+
+# Set initial relay states to ON 
 for locker in lockers.values():
-    locker['relay'].value(RELAY_ON)
+    locker['relay'].value(CERRADO)
 
 # Crea un objeto PWM para controlar el BUZZER
 buzzer = PWM(Pin(BUZZER_PIN))
@@ -99,12 +126,12 @@ mqtt.subscribe(TOPIC_SUB)
 
 
 def open_locker(locker):
-    locker['relay'].value(RELAY_OFF)
+    locker['relay'].value(ABIERTO)
     locker['cerrado'] = False
     check_locker(locker)
 
 def close_locker(locker):
-    locker['relay'].value(RELAY_ON)
+    locker['relay'].value(CERRADO)
     locker['cerrado'] = True
     check_locker(locker)
     
@@ -122,6 +149,27 @@ def stop_buzzer():
 		# Configura el ciclo de trabajo para que el BUZZER suene (0-1023, donde 512 es aproximadamente el 50%)
 		buzzer.duty(0)
 
+def update_shadow(mqtt_client, locker_id):
+    # fetch the state of the locker
+    locker = lockers[locker_id]
+
+    # create the payload for the shadow update
+    payload = {
+        "state": {
+            "reported": {
+                "rut": locker['rut'],
+                "hora_ocupacion": locker['hora_ocupacion'],
+                "hora_desocupacion": locker['hora_desocupacion'],
+                "cerrado": locker['cerrado'],
+                "ocupado": locker['ocupado'],
+                "disponible": locker['disponible']
+            }
+        }
+    }
+
+    # publish the shadow update
+    topic = "$aws/things/{}/shadow/update".format(locker_id)
+    mqtt_publish(mqtt_client, topic, ujson.dumps(payload))
 
 def process_message(topic, msg):
     # process the received MQTT message
@@ -140,12 +188,19 @@ while True:
     # periodically check for messages
     mqtt.check_msg()
     
+    all_lockers_closed = True
+    
     # check the state of each locker
     for locker in lockers:
         check_locker(locker)
+        update_shadow(mqtt, locker)
         if lockers[locker]["ocupado"] and not lockers[locker]["cerrado"]:
-            # if the locker is ocupado and not cerrado, beep the buzzer
+            # if the locker is ocupado and not closed, beep the buzzer
             start_buzzer()
+            all_lockers_closed = False
+
+    if all_lockers_closed:
+        stop_buzzer()
 
     # publish the current state of the lockers
     mqtt_publish(mqtt, TOPIC_PUB, ujson.dumps(lockers))
