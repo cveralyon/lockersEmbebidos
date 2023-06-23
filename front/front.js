@@ -29,7 +29,24 @@ function onConnectionLost(responseObject) {
 
 // Cuando llega un mensaje
 function onMessageArrived(message) {
-  console.log("onMessageArrived:" + message.payloadString);
+  console.log("Mensaje recibido: " + message.payloadString);
+  let receivedMessage = JSON.parse(message.payloadString);
+
+  if (receivedMessage.action === "rutVerification") {
+    if (receivedMessage.result === "found") {
+      console.log(
+        `El RUT existe y está asociado a los lockers: ${receivedMessage.lockers.join(
+          ", "
+        )}`
+      );
+      // Aquí podrías actualizar la UI para mostrar que el RUT fue encontrado y mostrar los nombres de los lockers.
+    } else {
+      console.log(`El RUT no fue encontrado`);
+      // Aquí podrías actualizar la UI para mostrar que el RUT no fue encontrado.
+    }
+  } else {
+    // manejo de otros tipos de mensajes...
+  }
 }
 
 function connectMqttClient() {
@@ -126,7 +143,7 @@ function verifyHashAndOpenLocker() {
   }
 }
 
-function abrirLockerAdmin(lockerName) {
+function abrirLockerAdmin(rut) {
   if (!isConnected) {
     console.log("Aún no conectado, intentando conectar...");
     connectMqttClient();
@@ -136,7 +153,7 @@ function abrirLockerAdmin(lockerName) {
   // Creamos un objeto con el estado deseado para el locker
   let desiredState = {
     action: "open",
-    locker: lockerName,
+    rut: rut, // Aquí cambiamos 'locker' por 'rut'
   };
 
   // Convertimos el objeto a una cadena JSON
@@ -145,7 +162,7 @@ function abrirLockerAdmin(lockerName) {
   client.send(message);
 }
 
-function abrirLockerUsuario(lockerName) {
+function abrirLockerUsuario(rut) {
   if (!isConnected) {
     console.log("Aún no conectado, intentando conectar...");
     connectMqttClient();
@@ -155,11 +172,30 @@ function abrirLockerUsuario(lockerName) {
   // Creamos un objeto con el estado deseado para el locker
   let desiredState = {
     action: "open",
-    locker: lockerName,
+    rut: rut, // Aquí cambiamos 'locker' por 'rut'
   };
 
   // Convertimos el objeto a una cadena JSON
   let message = new Paho.MQTT.Message(JSON.stringify(desiredState));
+  message.destinationName = TOPIC_PUB;
+  client.send(message);
+}
+
+function verifyRut(rut) {
+  if (!isConnected) {
+    console.log("Aún no conectado, intentando conectar...");
+    connectMqttClient();
+    return;
+  }
+
+  // Creamos un objeto con la acción y el RUT para verificar
+  let request = {
+    action: "verify",
+    rut: rut,
+  };
+
+  // Convertimos el objeto a una cadena JSON
+  let message = new Paho.MQTT.Message(JSON.stringify(request));
   message.destinationName = TOPIC_PUB;
   client.send(message);
 }

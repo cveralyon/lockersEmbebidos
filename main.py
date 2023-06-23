@@ -155,14 +155,37 @@ def update_locker_shadow(client, locker_name):
 def process_message(topic, msg):
     message = ujson.loads(msg)
     if "action" in message:
-        if message["action"] == "open":
+        if message["action"] == "verify":
+            verify_rut(message["rut"])
+        elif message["action"] == "open":
             # Identificar si se está retirando un documento
-            retirar = message.get("retirar", False)
-            open_locker(message["locker"], retirar=retirar)
+            # Iterar sobre los lockers para buscar el que corresponda al RUT recibido
+            for locker_name, locker in lockers.items():
+                if locker['rut'] == message["rut"]:
+                    open_locker(locker_name)
+                    time.sleep(2)
         elif message["action"] == "close":
-            # Identificar si se está ingresando un documento
-            ingresar = message.get("ingresar", False)
-            close_locker(message["locker"], ingresar=ingresar)
+            # Identificar si se está retirando un documento
+            # Iterar sobre los lockers para buscar el que corresponda al RUT recibido
+            for locker_name, locker in lockers.items():
+                if locker['rut'] == message["rut"]:
+                    close_locker(locker_name)
+                    time.sleep(2)
+
+def verify_rut(rut):
+    for locker_name, locker in lockers.items():
+        if locker['rut'] == rut:
+            return
+    # si el bucle termina sin encontrar el RUT, enviar un mensaje indicando que el RUT no se encontró
+    send_rut_not_found_message()
+
+def send_rut_not_found_message(client):
+    msg = {
+        'action': 'rutVerification',
+        'result': 'notFound'
+    }
+    client.publish(TOPIC_PUB, ujson.dumps(msg))
+
 
 
 
@@ -170,6 +193,8 @@ def process_message(topic, msg):
 def open_locker(locker_name, retirar=False):
     print("Entre a Open_Locker")
     locker = lockers[locker_name]
+    if locker['disponible'] != True:
+      retirar = True
     locker['relay'].value(ABIERTO)
     locker['cerrado'] = False
     if retirar:
@@ -180,6 +205,8 @@ def open_locker(locker_name, retirar=False):
 def close_locker(locker_name, ingresar=False):
     print("Entre a close_locker")
     locker = lockers[locker_name]
+    if locker['disponible'] == True:
+      ingresar = True
     if locker['locker_vacio'].value() or ingresar:
         locker['relay'].value(CERRADO)
         locker['cerrado'] = True
@@ -214,7 +241,7 @@ def main():
     while True:
         # Check and update the state of each locker
         for locker_name, locker in lockers.items():
-            if locker["relay"].value() == 1000:
+            if locker["puerta_cerrada"].value() == 1:
                 locker["cerrado"] = False
             else:
                 locker["cerrado"] = True
