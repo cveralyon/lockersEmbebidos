@@ -89,7 +89,7 @@ function generateHash(rut) {
 
 function openLocker() {
   var rut = document.getElementById("rut").value;
-  var hash = generateHash(rut);
+  rut = quitarPuntosYGuiones(rut);
   abrirLockerAdmin(rut);
 }
 
@@ -110,16 +110,14 @@ function onScanSuccess(decodedText, decodedResult) {
   const [url, query] = decodedText.split("?");
 
   const urlQueryParams = new URLSearchParams(query);
-
+  console.log(query);
+  console.log(urlQueryParams);
   const rutValue = urlQueryParams.get("RUN");
-
-  html5QrcodeScanner.clear();
-
-  const element = document.getElementById("document-result");
-
-  element.innerHTML = `We have found a document: ${rutValue}`;
+  console.log(rutValue);
 
   document.getElementById("rutCheck").value = rutValue;
+
+  html5QrcodeScanner.clear();
 }
 
 function startScan() {
@@ -130,8 +128,14 @@ function startScan() {
   html5QrcodeScanner.render(onScanSuccess);
 }
 
+function quitarPuntosYGuiones(cadena) {
+  var nuevaCadena = cadena.replace(/[-.]/g, "");
+  return nuevaCadena;
+}
+
 function verifyHashAndOpenLocker() {
   var rut = document.getElementById("rutCheck").value;
+  rut = quitarPuntosYGuiones(rut);
   var hash = CryptoJS.SHA256(rut);
   var providedHash = document.getElementById("hashCheck").value;
 
