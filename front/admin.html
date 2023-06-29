@@ -1,22 +1,186 @@
 <!DOCTYPE html>
 <html>
+  <head>
+    <title>Device Shadow Control</title>
+    <!-- https://sdk.amazonaws.com/builder/js/ -->
+    <script src="./aws-sdk-2.1382.0.min.js"></script>
+    <script>
+      const awsEndpoint = "a1otg0g21ui78m-ats.iot.us-east-2.amazonaws.com";
+      const awsRegion = "us-east-2";
+      const accessKeyId = "AKIAW3UEPPIEHX6OK27B";
+      const secretAccessKey = "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";
+
+      AWS.config.update({
+        region: awsRegion,
+        credentials: new AWS.Credentials({
+          accessKeyId: accessKeyId,
+          secretAccessKey: secretAccessKey,
+        }),
+      });
+
+      <!-- https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/IotData.html -->
+      const iotHandler = new AWS.IotData({ endpoint: awsEndpoint });
+
+      function updateAppState(newShadow) {
+        const onButton = document.getElementById("on");
+        const offButton = document.getElementById("off");
+
+        onButton.classList.remove("loading");
+        offButton.classList.remove("loading");
+
+        if (newShadow.state.desired.led.onboard === 0) {
+          offButton.disabled = true;
+          onButton.disabled = false;
+        } else {
+          offButton.disabled = false;
+          onButton.disabled = true;
+        }
+      }
+
+      function responseHandler(err, data) {
+        if (err) {
+          console.error("Error updating device shadow:", err);
+        } else {
+          const newShadow = JSON.parse(data.payload);
+
+          console.log("Device shadow updated:", newShadow);
+
+          updateAppState(newShadow);
+        }
+      }
+
+      function updateDeviceShadow(event) {
+        const { id } = event.target;
+
+        event.target.classList.add("loading");
+
+        const ledValue = id === "on" ? 1 : 0;
+
+        const payload = {
+          state: {
+            desired: {
+              led: {
+                onboard: ledValue,
+              },
+            },
+          },
+        };
+
+        const params = {
+          payload: JSON.stringify(payload),
+          thingName: "locker1",
+        };
+
+        iotHandler.updateThingShadow(params, responseHandler);
+      }
+
+      function getDeviceShadow() {
+        const params = {
+          thingName: "locker1",
+        };
+
+        iotHandler.getThingShadow(params, responseHandler);
+      }
+
+      function handleSliderChange(event) {
+        console.log("aca");
+        console.log(event.target.value);
+
+        // Generate new desired shadow
+
+        // Send shadow update to AWS
+      }
+
+      addEventListener("load", () => getDeviceShadow());
+    </script>
+    <style>
+      .buttonContainer {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 5vh 0;
+      }
+
+      .buttonContainer > button {
+        width: 35vh;
+        height: 35vh;
+        font-size: 7vh;
+        border-radius: 3rem;
+        border: 2px solid rgba(218, 218, 218, 1);
+        cursor: pointer;
+        text-transform: uppercase;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      .buttonContainer > button:disabled {
+        cursor: auto;
+      }
+
+      .buttonContainer > button:first-child {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        border-bottom: none;
+        background: rgba(218, 218, 218, 1);
+      }
+
+      .buttonContainer > button:last-child {
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+        border-top: none;
+        background: rgba(218, 218, 218, 1);
+      }
+
+      .buttonContainer > button:first-child:disabled {
+        background: white;
+      }
+
+      .buttonContainer > button:last-child:disabled {
+        background: white;
+      }
+
+      .loading {
+        cursor: progress !important;
+      }
+
+      .sliderContainer {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 5vh 0;
+      }
+
+      .sliderContainer > p {
+        text-transform: uppercase;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 1.5rem;
+      }
+
+      .sliderContainer > input {
+        width: 35vh;
+        cursor: grab;
+      }
+
+      .sliderContainer > input:active {
+        cursor: grabbing;
+      }
+    </style>
+  </head>
+
   <body>
-    <h2>Generar hash de RUT</h2>
+    <div class="buttonContainer">
+      <button onclick="updateDeviceShadow(event)" id="on" disabled>ON</button>
+      <button onclick="updateDeviceShadow(event)" id="off" disabled>OFF</button>
+    </div>
 
-    <form id="hashForm">
-      <label for="rut">Ingresa el RUT:</label><br />
-      <input type="text" id="rut" name="rut" /><br />
-      <input type="button" value="Abrir Locker" id="generateBtn" />
-    </form>
-
-    <p id="lockerStatus"></p>
-    <p id="hashResult"></p>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.0.0/crypto-js.min.js"></script>
-    <script
-      src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"
-      type="text/javascript"
-    ></script>
-    <script src="front.js"></script>
+    <div class="sliderContainer">
+      <p>Velocidad</p>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        id="slider"
+        onchange="handleSliderChange(event)"
+      />
+    </div>
   </body>
 </html>

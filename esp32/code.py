@@ -7,8 +7,8 @@ import network
 from umqtt.simple import MQTTClient
 
 # Wi-Fi details
-WIFI_SSID = 'WHITE-HOUSE-2.4G'
-WIFI_PASSWORD = 'lasmalvas63'
+WIFI_SSID = 'wifi-campus'
+WIFI_PASSWORD = 'uandes2200'
 
 # AWS IoT Core details
 SERVER = 'a1otg0g21ui78m-ats.iot.us-east-2.amazonaws.com'
@@ -77,7 +77,7 @@ lockers = {
                 "cerrado": True, 
                 "hora_ocupacion": None,
                 "hora_desocupacion": None, 
-                "rut": None, 
+                "rut": 17456, 
                 "disponible": True},
     
     "locker2": {"relay": locker2_relay, 
@@ -141,11 +141,11 @@ def locker_data(locker):
     return locker_data
 
 # Function to update the shadow of a locker
-def update_locker_shadow(client, locker_name):
+def update_locker_shadow(client):
     shadow_message = {
         "state": {
             "reported": {
-                locker_name: locker_data(lockers[locker_name])
+                'lockers': lockers
             }
         }
     }
@@ -153,17 +153,39 @@ def update_locker_shadow(client, locker_name):
     mqtt_publish(client, TOPIC_PUB, shadow_message_str)
 
 def process_message(topic, msg):
+    import utime
+    
+    global lockers
     message = ujson.loads(msg)
+    print("entre en process_message")
     if "action" in message:
         if message["action"] == "verify":
             verify_rut(message["rut"])
         elif message["action"] == "open":
             # Identificar si se está retirando un documento
+            if message["retiro"] == "true":
+              #EL VALOR DEBE SER TRUE PARA RETIRAR
+              for locker_name, locker in lockers.items():
+                if locker['rut'] == message["rut"]:
+                    open_locker(locker_name, True)
+                    time.sleep(2)
+              pass
+            else: #RETIRO = FALSE
+              locker = message["locker"]
+              print('ADMIN COLOCANDO DOCUMENTOS')
+              open_locker(locker)
+              time.sleep(3)
+              close_locker(locker)
+              lockers[locker]["rut"] = message["rut"]
+              lockers[locker]["disponible"] = False
+              segundos_desde_1970 = utime.time()
+              fecha_actual = utime.localtime(segundos_desde_1970)
+              lockers[locker]["hora_ocupacion"] = fecha_actual
             # Iterar sobre los lockers para buscar el que corresponda al RUT recibido
-            for locker_name, locker in lockers.items():
+            """for locker_name, locker in lockers.items():
                 if locker['rut'] == message["rut"]:
                     open_locker(locker_name)
-                    time.sleep(2)
+                    time.sleep(2)"""
         elif message["action"] == "close":
             # Identificar si se está retirando un documento
             # Iterar sobre los lockers para buscar el que corresponda al RUT recibido
@@ -191,6 +213,7 @@ def send_rut_not_found_message(client):
 
 ## CODIGO DE LOGICA 
 def open_locker(locker_name, retirar=False):
+    global lockers
     print("Entre a Open_Locker")
     locker = lockers[locker_name]
     if locker['disponible'] != True:
@@ -198,33 +221,49 @@ def open_locker(locker_name, retirar=False):
     locker['relay'].value(ABIERTO)
     locker['cerrado'] = False
     if retirar:
-        locker['disponible'] = False
-        locker['hora_desocupacion'] = time.time()  # Actualiza la hora de desocupación
+        lockers[locker_name]['disponible'] = False
+        lockers[locker_name]['hora_desocupacion'] = time.time()  # Actualiza la hora de desocupación
+        check_locker(locker_name)
+        close_locker(locker_name, False)
     check_locker(locker_name)
 
 def close_locker(locker_name, ingresar=False):
+    import utime
+    global lockers
     print("Entre a close_locker")
     locker = lockers[locker_name]
     if locker['disponible'] == True:
+      print("paso por disponible")
       ingresar = True
     if locker['locker_vacio'].value() or ingresar:
         locker['relay'].value(CERRADO)
         locker['cerrado'] = True
         if ingresar:
+            segundos_desde_1970 = utime.time()
+            fecha_actual = utime.localtime(segundos_desde_1970)
             locker['disponible'] = False
-            locker['hora_ocupacion'] = time.time()  # Actualiza la hora de ocupación
+            locker['hora_ocupacion'] = fecha_actual  # Actualiza la hora de ocupación
     else:
+        print("SONANDO!!!")
         start_buzzer()
-        time.sleep(1)  # Espera un segundo antes de verificar el locker
-        check_locker(locker_name)
+        while lockers[locker_name]["locker_vacio"].value() != 1 or lockers[locker_name]["puerta_cerrada"].value() != 0:
+          print("PIIIIIIIII!!!")
+          time.sleep(1)  # Espera un segundo antes de verificar el locker
+          check_locker(locker_name)
+        print("YA NO HAY NADA EN EL LOCKER")
         stop_buzzer()  # Detiene el buzzer después de la verificación
+        locker['relay'].value(CERRADO)
+        locker['cerrado'] = True
 
 def check_locker(locker_name):
     print("Entre a check_locker")
     locker = lockers[locker_name]
-    locker["ocupado"] = locker["puerta_cerrada"].value()
+    print(locker["puerta_cerrada"].value())
+    lockers[locker_name]["ocupado"] = locker["puerta_cerrada"].value()
+    print(locker["ocupado"])
 
 def start_buzzer():
+		print("Empieza a zonar la wea...")
 		# Configura la frecuencia del BUZZER (por ejemplo, 440 Hz para la nota A4)
 		buzzer.freq(440)
 		# Configura el ciclo de trabajo para que el BUZZER suene (0-1023, donde 512 es aproximadamente el 50%)
@@ -237,26 +276,27 @@ def stop_buzzer():
 def main():
     # Connect to MQTT
     client = connect_to_mqtt()
-    
     while True:
         # Check and update the state of each locker
         for locker_name, locker in lockers.items():
-            if locker["puerta_cerrada"].value() == 1:
+            if locker["puerta_cerrada"].value() == 0:
                 locker["cerrado"] = False
             else:
                 locker["cerrado"] = True
             
-            if locker["locker_vacio"].value() == 1:
+            if locker["locker_vacio"].value() == 0:
                 locker["ocupado"] = False
             else:
                 locker["ocupado"] = True
                 
             # Update the shadow of the locker
-            update_locker_shadow(client, locker_name)
-
+        update_locker_shadow(client)
+        time.sleep(5)
         # Non-blocking wait for message
         client.check_msg()
         time.sleep(1)
-        
+
+
+stop_buzzer()
 main()
 
