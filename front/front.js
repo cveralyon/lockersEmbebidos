@@ -1,10 +1,10 @@
 const CLIENT_ID = "cerraduras-Esp32";
 const TOPIC_PUB = "$aws/things/" + CLIENT_ID + "/shadow/update";
-const SERVER = "a1otg0g21ui78m-ats.iot.us-east-2.amazonaws.com";
+const SERVER = "XXX";
 const region = "us-east-2";
-const clientId = "cerraduras-Esp32";
-const accessKeyId = "AKIAW3UEPPIEHX6OK27B";
-const secretAccessKey = "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";
+const clientId = "XXX";
+const accessKeyId = "AXX";
+const secretAccessKey = "XX";
 const endpoint = `wss://${SERVER}`;
 
 //const AWS = require("aws-sdk");
